@@ -5,3 +5,4 @@
 - [Vertex](./vertex/index.md)
 - [Node](./node/index.md)
 - [Splay](./splay/index.md)
+- [Expose](./expose/index.md)
