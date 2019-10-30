@@ -81,7 +81,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div id="sidebar-scrollbox" class="sidebar-scrollbox">
-                <ol class="chapter"><li class="expanded "><a href="introduction.html"><strong aria-hidden="true">1.</strong> Introduction</a></li></ol>
+                <ol class="chapter"><li class="expanded "><a href="introduction.html"><strong aria-hidden="true">1.</strong> Introduction</a></li><li class="expanded "><a href="references.html"><strong aria-hidden="true">2.</strong> References</a></li><li class="expanded "><a href="vertex/index.html"><strong aria-hidden="true">3.</strong> Vertex</a></li><li class="expanded "><a href="node/index.html"><strong aria-hidden="true">4.</strong> Node</a></li><li class="expanded "><a href="splay/index.html"><strong aria-hidden="true">5.</strong> Splay</a></li><li class="expanded "><a href="expose/index.html"><strong aria-hidden="true">6.</strong> Expose</a></li><li class="expanded "><a href="guard/index.html"><strong aria-hidden="true">7.</strong> Guard</a></li><li class="expanded "><a href="soft_expose/index.html"><strong aria-hidden="true">8.</strong> Soft Expose</a></li><li class="expanded "><a href="link/index.html"><strong aria-hidden="true">9.</strong> Link</a></li><li class="expanded "><a href="cluster/index.html"><strong aria-hidden="true">10.</strong> Cluster</a></li><li class="expanded "><a href="cut/index.html"><strong aria-hidden="true">11.</strong> Cut</a></li><li class="expanded "><a href="select/index.html"><strong aria-hidden="true">12.</strong> Select</a></li><li class="expanded "><a href="exmaple/index.html"><strong aria-hidden="true">13.</strong> Example</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -149,7 +149,933 @@
                 <div id="content" class="content">
                     <main>
                         <h1><a class="header" href="#introduction" id="introduction">Introduction</a></h1>
-<p>toptreeを実装するpdfやぞ</p>
+<p>toptreeを実装する記事やぞ</p>
+<h2><a class="header" href="#toptree" id="toptree">toptree</a></h2>
+<p>簡単に言うとLinkCutTreeの上位互換  700行あります.(解説するのしんどいけど... 700行そんなに多くないっていう声も合ったので気にせず実装してね)</p>
+<h2><a class="header" href="#実装方針" id="実装方針">実装方針</a></h2>
+<p>はじめから<code>struct toptree</code>と書く, templateを使う, 最適化をしようとすると簡単に破滅します. いつものライブラリに対する綺麗な書き方はしないほうがいいです...<br />
+この記事では, しません(<code>struct node</code>とかその他の関数をグローバルにおいたりします)</p>
+<p>ここで, 僕のtoptree(self-adjusting toptree)をおいておきます. これを実装します.</p>
+<p><a href="https://yukicoder.me/problems/no/902">No.902 Query ζone - yukicoder</a></p>
+<pre><code class="language-cpp">#include &lt;array&gt;
+#include &lt;cassert&gt;
+
+using i64 = long long;
+
+struct cluster {
+  i64 ans;
+  i64 inter;
+  i64 sum;
+  i64 left;
+  i64 right;
+  i64 has;
+  i64 length;
+
+  using V = std::size_t;
+  cluster(i64 l): ans(0), inter(0), sum(0), left(0), right(0), has(0), length(l) {}
+  static cluster identity() {
+    return cluster(0);
+  }
+  static cluster compress(const cluster&amp; a, const cluster&amp; b, V av, V bv, V cv) {
+    if(a.has == 0 &amp;&amp; b.has == 0) {
+      if(cv == 0) {
+        cluster c = identity();
+        c.ans = (av &amp;&amp; bv) * (a.length + b.length);
+        c.length = a.length + b.length;
+        return c;
+      }
+      else {
+        cluster c = identity();
+        c.ans = av * a.length + bv * b.length;
+        c.left = a.length;
+        c.right = b.length;
+        c.has = 1;
+        c.length = a.length + b.length;
+        return c;
+      }
+    }
+    else if(a.has == 0) {
+      if(cv == 0) {
+        cluster c = identity();
+        c.inter = b.inter;
+        c.sum = b.sum;
+        c.left = a.length + b.left;
+        c.right = b.right;
+        c.has = 1;
+        c.length = a.length + b.length;
+        c.ans = av * c.left + bv * c.right + c.sum + (av || bv) * c.inter;
+        return c;
+      }
+      else {
+        cluster c = identity();
+        c.inter = 0;
+        c.left = a.length;
+        c.right = b.right;
+        c.has = 1;
+        c.length = a.length + b.length;
+        c.sum = b.sum + b.left + b.inter;
+        c.ans = av * c.left + bv * c.right + c.sum + (av || bv) * c.inter;
+        return c;
+      }
+    }
+    else if(b.has == 0) {
+      if(cv == 0) {
+        cluster c = identity();
+        c.inter = a.inter;
+        c.sum = a.sum;
+        c.left = a.left;
+        c.right = a.right + b.length;
+        c.has = 1;
+        c.length = a.length + b.length;
+        c.ans = av * c.left + bv * c.right + c.sum + (av || bv) * c.inter;
+        return c;
+      }
+      else {
+        cluster c = identity();
+        c.inter = 0;
+        c.left = a.left;
+        c.right = b.length;
+        c.has = 1;
+        c.length = a.length + b.length;
+        c.sum = a.sum + a.right + a.inter;
+        c.ans = av * c.left + bv * c.right + c.sum + (av || bv) * c.inter;
+        return c;
+      }
+    }
+    else {
+      cluster c = identity();
+      c.inter = 0;
+      c.left = a.left;
+      c.right = b.right;
+      c.has = 1;
+      c.length = a.length + b.length;
+      c.sum = a.sum + b.sum + a.right + b.left + a.inter + b.inter;
+      c.ans = av * c.left + bv * c.right + c.sum + (av || bv) * c.inter;
+      return c;
+    }
+  }
+  static cluster rake(const cluster&amp; a, const cluster&amp; b, V av, V bv, V cv) {
+    if(a.has == 0 &amp;&amp; b.has == 0) {
+      if(bv == 0) {
+        cluster c = identity();
+        c.length = a.length;
+        return c;
+      }
+      else {
+        cluster c = identity();
+        c.inter = b.length;
+        c.left = a.length;
+        c.right = 0;
+        c.has = 1;
+        c.length = a.length;
+        return c;
+      }
+    }
+    else if(a.has == 0) {
+      if(bv == 0) {
+        cluster c = identity();
+        c.inter = b.inter + b.right;
+        c.sum = b.sum;
+        c.left = a.length;
+        c.right = 0;
+        c.has = 1;
+        c.length = a.length;
+        return c;
+      }
+      else {
+        cluster c = identity();
+        c.inter = b.inter + b.right;
+        c.sum = b.sum + b.left;
+        c.left = a.length;
+        c.right = 0;
+        c.has = 1;
+        c.length = a.length;
+        return c;
+      }
+    }
+    else if(b.has == 0) {
+      if(bv == 0) {
+        cluster c = identity();
+        c.inter = a.inter;
+        c.sum = a.sum;
+        c.left = a.left;
+        c.right = a.right;
+        c.has = 1;
+        c.length = a.length;
+        return c;
+      }
+      else {
+        cluster c = identity();
+        c.inter = 0;
+        c.sum = a.sum + a.inter + a.right + b.length;
+        c.left = a.left;
+        c.right = 0;
+        c.has = 1;
+        c.length = a.length;
+        return c;
+      }
+    }
+    else {
+      cluster c = identity();
+      c.inter = 0;
+      c.left = a.left;
+      c.right = 0;
+      c.has = 1;
+      c.length = a.length;
+      c.sum = a.sum + b.sum + a.right + b.right + a.inter + b.inter + bv * b.left;
+      return c;
+    }
+  }
+  static cluster reverse(const cluster&amp; c) {
+    cluster res = c;
+    std::swap(res.left, res.right);
+    return res;
+  }
+  static std::size_t select(const cluster&amp; a, const cluster&amp; b, V av, V bv, V cv) {
+    return 0;
+  }
+};
+
+class vertex;
+
+class node;
+int parent_dir(node*);
+node* link(vertex, vertex, cluster);
+void test_comp_set(node* n);
+
+class vertex_raw {
+  cluster::V val;
+  node* hand;
+
+public:
+
+  vertex_raw(cluster::V val): val(val), hand(nullptr) {}
+
+  node* handle() const { return this-&gt;hand; }
+  void set_handle(node* hand) { this-&gt;hand = hand; }
+  const cluster::V&amp; value() const { return this-&gt;val; }
+  void set_value(cluster::V val) {
+    this-&gt;val = val;
+  }
+};
+
+class vertex {
+  vertex_raw* ver;
+
+private:
+
+
+public:
+
+  static vertex dangling() { return vertex(); } 
+
+  vertex(): ver(nullptr) {}
+  vertex(cluster::V val): ver( new vertex_raw(val)) {
+    vertex dummy;
+    dummy.ver = new vertex_raw(cluster::V());
+    link(*this, dummy, cluster::identity());
+  }
+
+  bool operator==(const vertex&amp; other) { return this-&gt;ver == other.ver; }
+  
+  inline node* handle() const { return this-&gt;ver-&gt;handle(); }
+  inline void set_handle(node* hand) { this-&gt;ver-&gt;set_handle(hand); }
+  inline const cluster::V&amp; value() const { return this-&gt;ver-&gt;value(); }
+  inline void set_value(cluster::V val) { this-&gt;ver-&gt;set_value(val); }
+};
+
+enum class Type { Compress, Rake, Edge, None };
+
+static std::size_t ni = 0;
+extern node ns[1010101];
+
+class node {
+  node* ch[2];
+  node* par;
+  node* ra;
+  node* me;
+  bool rev;
+  cluster fo;
+  vertex v[2];
+  Type ty;
+
+
+
+public:
+
+  node(): par(nullptr), ra(nullptr), me(nullptr), rev(false),
+    fo(cluster::identity()), ty(Type::None) {} 
+
+
+
+  static node* new_edge(vertex v, vertex u, cluster val) {
+    //node* n = new node();
+    node* n = ns + (ni++);
+    n-&gt;v[0] = v;
+    n-&gt;v[1] = u;
+    n-&gt;fo = val;
+    n-&gt;me = n;
+    n-&gt;ty = Type::Edge;
+
+    n-&gt;fix();
+
+    return n;
+  }
+
+  static node* new_compress(node* left, node* right) {
+    //node* n = new node();
+    node* n = ns + (ni++);
+    n-&gt;ch[0] = left;
+    n-&gt;ch[1] = right;
+    n-&gt;me = n;
+    n-&gt;ty = Type::Compress;
+    n-&gt;fix();
+    return n;
+  }
+
+  static node* new_rake(node* left, node* right) {
+    //node * n = new node();
+    node* n = ns + (ni++);
+    n-&gt;ch[0] = left;
+    n-&gt;ch[1] = right;
+    n-&gt;me = n;
+    n-&gt;ty = Type::Rake;
+    n-&gt;fix();
+    return n;
+  }
+
+  inline void fix() {
+    if(this-&gt;ty == Type::Edge) {
+      if(!this-&gt;parent()) {
+        this-&gt;endpoint(0).set_handle(this-&gt;me);
+        this-&gt;endpoint(1).set_handle(this-&gt;me);
+      }
+      else if(this-&gt;parent()-&gt;ty == Type::Compress) {
+        if(parent_dir(this-&gt;me) == -1) {
+          this-&gt;endpoint(0).set_handle(this-&gt;me);
+        }
+      }
+      else if(this-&gt;parent()-&gt;ty == Type::Rake) {
+        this-&gt;endpoint(0).set_handle(this-&gt;me);
+      }
+    }
+    else if(this-&gt;ty == Type::Compress) {
+      this-&gt;push();
+      this-&gt;v[0] = this-&gt;child(0)-&gt;endpoint(0);
+      this-&gt;v[1] = this-&gt;child(1)-&gt;endpoint(1);
+      assert(this-&gt;child(0)-&gt;endpoint(1) == this-&gt;child(1)-&gt;endpoint(0));
+
+      cluster left = this-&gt;child(0)-&gt;fold();
+      node* l = this-&gt;child(0);
+      if(this-&gt;rake()) {
+        node* r = this-&gt;rake();
+        left = cluster::rake(l-&gt;fold(), r-&gt;fold(), l-&gt;endpoint(0).value(), r-&gt;endpoint(0).value(), l-&gt;endpoint(1).value());
+      }
+      node* r = this-&gt;child(1);
+      this-&gt;fo= cluster::compress(left, r-&gt;fold(),
+          l-&gt;endpoint(0).value(), r-&gt;endpoint(1).value(), l-&gt;endpoint(1).value());
+      
+      this-&gt;child(0)-&gt;endpoint(1).set_handle(this-&gt;me);
+
+      if(!this-&gt;parent()) {
+        this-&gt;endpoint(0).set_handle(this-&gt;me);
+        this-&gt;endpoint(1).set_handle(this-&gt;me);
+      }
+      else if(this-&gt;parent()-&gt;ty == Type::Compress) {
+        if(parent_dir(this-&gt;me) == -1) {
+          this-&gt;endpoint(0).set_handle(this-&gt;me);
+        }
+      }
+      else if(this-&gt;parent()-&gt;ty == Type::Rake) {
+        this-&gt;endpoint(0).set_handle(this-&gt;me);
+      }
+
+    }
+    else if(this-&gt;ty == Type::Rake) {
+      this-&gt;push();
+      this-&gt;v[0] = this-&gt;child(0)-&gt;endpoint(0);
+      this-&gt;v[1] = this-&gt;child(0)-&gt;endpoint(1);
+      this-&gt;fo = cluster::rake(this-&gt;child(0)-&gt;fold(), this-&gt;child(1)-&gt;fold(),
+          this-&gt;child(0)-&gt;endpoint(0).value(), this-&gt;child(1)-&gt;endpoint(0).value(), this-&gt;child(0)-&gt;endpoint(1).value());
+    }
+    else { assert(false); }
+  }
+
+  inline void push() {
+    if(this-&gt;ty == Type::Compress) {
+      if(this-&gt;rev) {
+        std::swap(this-&gt;ch[0], this-&gt;ch[1]);
+        this-&gt;child(0)-&gt;reverse();
+        this-&gt;child(1)-&gt;reverse();
+        this-&gt;rev = false;
+      }
+    }
+  }
+
+  inline void reverse() {
+    if(this-&gt;ty == Type::Edge) {
+      std::swap(this-&gt;v[0], this-&gt;v[1]);
+      this-&gt;fo = cluster::reverse(this-&gt;fold());
+    }
+    else if(this-&gt;ty == Type::Compress) {
+      std::swap(this-&gt;v[0], this-&gt;v[1]);
+      this-&gt;fo = cluster::reverse(this-&gt;fold());
+      this-&gt;rev ^= true;
+    }
+    else if(this-&gt;ty == Type::Rake) {
+    }
+    else { assert(false); }
+  }
+
+  inline node* parent() const { return this-&gt;par; }
+  inline void set_parent(node* par) { this-&gt;par = par; }
+  inline node* rake() const { return this-&gt;ra; }
+  inline void set_rake(node* rake) { this-&gt;ra = rake; }
+  inline node* child(std::size_t dir) const { return this-&gt;ch[dir]; }
+  inline void set_child(node* ch, std::size_t dir) { this-&gt;ch[dir] = ch; }
+  inline vertex endpoint(std::size_t dir) { return this-&gt;v[dir]; }
+  inline Type type() const { return this-&gt;ty; }
+
+  cluster fold() const { return this-&gt;fo; }
+
+  bool guard;
+};
+
+int parent_dir(node* child) {
+  node* par = child-&gt;parent();
+  if(par) {
+    if(par-&gt;guard) { return -1; }
+    else if(par-&gt;child(0) == child) { return 0; }
+    else if(par-&gt;child(1) == child) { return 1; }
+    else { return -1; }
+  }
+  else { return -1; }
+}
+
+int parent_dir_guard(node* child) {
+  node* par = child-&gt;parent();
+  if(par) {
+    if(par-&gt;child(0) == child) { return 0; }
+    else if(par-&gt;child(1) == child) { return 1; }
+    else { return -1; }
+  }
+  else { return -1; }
+}
+
+void rotate(node* t, node* x, std::size_t dir) {
+  node* y = x-&gt;parent();
+  int par = parent_dir_guard(x);
+  t-&gt;child(dir)-&gt;push();
+  x-&gt;set_child(t-&gt;child(dir), dir ^ 1);
+  t-&gt;child(dir)-&gt;set_parent(x);
+  t-&gt;set_child(x, dir);
+  x-&gt;set_parent(t);
+  t-&gt;set_parent(y);
+  if(par != -1) {
+    y-&gt;set_child(t, par);
+  }
+  else if(y &amp;&amp; y-&gt;type() == Type::Compress) {
+    y-&gt;set_rake(t);
+  }
+  x-&gt;fix();
+  t-&gt;fix();
+  if(y &amp;&amp; !y-&gt;guard) { y-&gt;fix(); }
+}
+
+void splay(node* t) {
+  assert(t-&gt;type() != Type::Edge);
+  t-&gt;push();
+
+  while(parent_dir(t) != -1) {
+    node* q = t-&gt;parent();
+    if(q-&gt;type() != t-&gt;type()) break;
+    if(parent_dir(q) != -1 &amp;&amp; q-&gt;parent() &amp;&amp; q-&gt;parent()-&gt;type() == q-&gt;type()) {
+      node* r = q-&gt;parent();
+      if(r-&gt;parent()) r-&gt;parent()-&gt;push();
+      r-&gt;push();
+      q-&gt;push();
+      t-&gt;push();
+      int qt_dir = parent_dir(t);
+      int rq_dir = parent_dir(q);
+      if(rq_dir == qt_dir) {
+        rotate(q, r, rq_dir ^ 1);
+        rotate(t, q, qt_dir ^ 1);
+      }
+      else {
+        rotate(t, q, qt_dir ^ 1);
+        rotate(t, r, rq_dir ^ 1);
+      }
+    }
+    else {
+      if(q-&gt;parent()) q-&gt;parent()-&gt;push();
+      q-&gt;push();
+      t-&gt;push();
+      int qt_dir = parent_dir(t);
+      rotate(t, q, qt_dir ^ 1);
+    }
+  }
+}
+
+node* expose_raw(node* t) {
+  while(true) {
+    assert(t-&gt;type() != Type::Rake);
+    if(t-&gt;type() == Type::Compress) {
+      splay(t);
+    }
+    node* n = nullptr;
+    {
+      node* par = t-&gt;parent();
+      if(!par) { break; }
+      else if(par-&gt;type() == Type::Rake) {
+        par-&gt;push();
+        splay(par);
+        n = par-&gt;parent();
+      }
+      else if(par-&gt;type() == Type::Compress) {
+        par-&gt;push();
+        if(par-&gt;guard &amp;&amp; parent_dir_guard(t) != -1) { break; }
+        n = par;
+      }
+      else { assert(false); }
+    }
+
+    splay(n);
+
+    
+    int dir = parent_dir_guard(n);
+    if(dir == -1 || n-&gt;parent()-&gt;type() == Type::Rake) dir = 0;
+    if(dir == 1) {
+      n-&gt;child(dir)-&gt;reverse();
+      n-&gt;child(dir)-&gt;push();
+      t-&gt;reverse();
+      t-&gt;push();
+    }
+    int n_dir = parent_dir(t);
+    if(n_dir != -1) {
+      node* nch = n-&gt;child(dir);
+      nch-&gt;push();
+      node* rake = t-&gt;parent();
+      rake-&gt;push();
+
+      rake-&gt;set_child(nch, n_dir);
+      nch-&gt;set_parent(rake);
+      n-&gt;set_child(t, dir);
+      t-&gt;set_parent(n);
+      nch-&gt;fix();
+      rake-&gt;fix();
+      t-&gt;fix();
+      n-&gt;fix();
+      splay(rake);
+    }
+    else {
+      node* nch = n-&gt;child(dir);
+      nch-&gt;push();
+      n-&gt;set_rake(nch);
+      nch-&gt;set_parent(n);
+      n-&gt;set_child(t, dir);
+      t-&gt;set_parent(n);
+
+      nch-&gt;fix();
+      t-&gt;fix();
+      n-&gt;fix();
+    }
+    if(t-&gt;type() == Type::Edge) {
+      t = n;
+    }
+  }
+  
+  return t;
+}
+
+node* expose(vertex ver) {
+  return expose_raw(ver.handle());
+}
+
+void soft_expose(vertex v, vertex u) {
+  node* root = expose(v);
+  if(v.handle() == u.handle()) {
+    if(root-&gt;endpoint(1) == v || root-&gt;endpoint(0) == u) {
+      root-&gt;reverse();
+      root-&gt;push();
+    }
+    return;
+  }
+  root-&gt;guard = true;
+  node* soot = expose(u);
+  root-&gt;guard = false;
+  root-&gt;fix();
+  if(parent_dir(soot) == 0) {
+    root-&gt;reverse();
+    root-&gt;push();
+  }
+}
+
+node* link(vertex v, vertex u, cluster weight) {
+  if(!v.handle() &amp;&amp; !u.handle()) {
+    return node::new_edge(v, u, weight);
+  }
+  else {
+    node* nnu = u.handle();
+    node* nnv = v.handle();
+    node* e = node::new_edge(v, u, weight);
+    node* left = nullptr;
+
+    if(!nnu) { left = e; }
+    else {
+      node* uu = expose_raw(nnu);
+      uu-&gt;push();
+      if(uu-&gt;endpoint(1) == u) {
+        uu-&gt;reverse();
+        uu-&gt;push();
+      }
+      if(uu-&gt;endpoint(0) == u) {
+        node* nu = node::new_compress(e, uu);
+        e-&gt;set_parent(nu);
+        e-&gt;fix();
+        uu-&gt;set_parent(nu);
+        uu-&gt;fix();
+        nu-&gt;fix();
+
+        left = nu;
+      }
+      else {
+        node* nu = uu;
+        node* left_ch = nu-&gt;child(0);
+        left_ch-&gt;push();
+
+        nu-&gt;set_child(e, 0);
+        e-&gt;set_parent(nu);
+        e-&gt;fix();
+        
+        node* beta = nu-&gt;rake();
+        node* rake = nullptr;
+        if(beta) {
+          beta-&gt;push();
+          rake = node::new_rake(beta, left_ch);
+          beta-&gt;set_parent(rake);
+          left_ch-&gt;set_parent(rake);
+          beta-&gt;fix();
+          left_ch-&gt;fix();
+        }
+        else {
+          rake = left_ch;
+        }
+        nu-&gt;set_rake(rake);
+        rake-&gt;set_parent(nu);
+        rake-&gt;fix();
+        nu-&gt;fix();
+
+        left = nu;
+      }
+    }
+
+    if(!nnv) {}
+    else {
+      node* vv =expose_raw(nnv);
+      vv-&gt;push();
+      if(vv-&gt;endpoint(0) == v) {
+        vv-&gt;reverse();
+        vv-&gt;push();
+      }
+      if(vv-&gt;endpoint(1) == v) {
+        node* top = node::new_compress(vv, left);
+        vv-&gt;set_parent(top);
+        left-&gt;set_parent(top);
+        vv-&gt;fix();
+        left-&gt;fix();
+        top-&gt;fix();
+      }
+      else {
+        node* nv = vv;
+        node* right_ch = nv-&gt;child(1);
+        right_ch-&gt;reverse();
+        right_ch-&gt;push();
+
+        nv-&gt;set_child(left, 1);
+        left-&gt;set_parent(nv);
+        left-&gt;fix();
+
+        node* alpha = nv-&gt;rake();
+        node* rake = nullptr;
+        if(alpha) {
+          alpha-&gt;push();
+          rake = node::new_rake(alpha, right_ch);
+          alpha-&gt;set_parent(rake);
+          alpha-&gt;fix();
+          right_ch-&gt;set_parent(rake);
+          right_ch-&gt;fix();
+        }
+        else {
+          rake = right_ch;
+        }
+        nv-&gt;set_rake(rake);
+        rake-&gt;set_parent(nv);
+        rake-&gt;fix();
+        nv-&gt;fix();
+      }
+    }
+
+    return e;
+  }
+}
+
+void bring(node* root) {
+  node* rake = root-&gt;rake();
+
+  if(!rake) {
+    node* left = root-&gt;child(0);
+    //delete root, root = nullptr;
+    left-&gt;set_parent(nullptr);
+    left-&gt;fix();
+  }
+  else if(rake-&gt;type() == Type::Compress || rake-&gt;type() == Type::Edge) {
+    rake-&gt;push();
+    node* new_right = rake;
+    new_right-&gt;reverse();
+    new_right-&gt;push();
+
+    root-&gt;set_child(new_right, 1);
+    new_right-&gt;set_parent(root);
+
+    root-&gt;set_rake(nullptr);
+
+    new_right-&gt;fix();
+    root-&gt;fix();
+  }
+  else if(rake-&gt;type() == Type::Rake) {
+    rake-&gt;push();
+    while(rake-&gt;child(1)-&gt;type() == Type::Rake) {
+      rake-&gt;child(1)-&gt;push();
+      rake = rake-&gt;child(1);
+    }
+    root-&gt;guard = true;
+    splay(rake);
+    root-&gt;guard = false;
+
+    node* new_rake = rake-&gt;child(0);
+    node* new_right = rake-&gt;child(1);
+
+    //delete rake, rake = nullptr;
+    new_right-&gt;reverse();
+    new_right-&gt;push();
+
+    root-&gt;set_child(new_right, 1);
+    new_right-&gt;set_parent(root);
+
+    root-&gt;set_rake(new_rake);
+    new_rake-&gt;set_parent(root);
+
+    new_rake-&gt;fix();
+    new_right-&gt;fix();
+    root-&gt;fix();
+  }
+}
+
+void cut(vertex v, vertex u) {
+  soft_expose(v, u);
+  node* root = v.handle();
+  root-&gt;push();
+  node* right = root-&gt;child(1);
+  right-&gt;set_parent(nullptr);
+
+  right-&gt;reverse();
+  right-&gt;push();
+
+  bring(right);
+  bring(root);
+}
+
+cluster path_query(vertex v, vertex u) {
+  soft_expose(v, u);
+  node* root = v.handle();
+  root-&gt;push();
+  if(root-&gt;endpoint(0) == v &amp;&amp; root-&gt;endpoint(1) == u) {
+    return root-&gt;fold();
+  }
+  else if(root-&gt;endpoint(0) == v) {
+    return root-&gt;child(0)-&gt;fold();
+  }
+  else if(root-&gt;endpoint(1) == u) {
+    return root-&gt;child(1)-&gt;fold();
+  }
+  else {
+    root-&gt;child(1)-&gt;push();
+    return root-&gt;child(1)-&gt;child(0)-&gt;fold();
+  }
+}
+
+node* select_rake(node* rake, cluster&amp; right, cluster::V&amp; rv0, cluster::V&amp; rv1) {
+  rake-&gt;push();
+  while(rake-&gt;type() == Type::Rake) {
+    node* l = rake-&gt;child(0);
+    node* r = rake-&gt;child(1);
+    l-&gt;push();
+    r-&gt;push();
+
+    cluster rf = cluster::rake(r-&gt;fold(), right, r-&gt;endpoint(0).value(), rv0, r-&gt;endpoint(1).value());
+    cluster::V r0 = r-&gt;endpoint(0).value();
+
+    std::size_t dir = cluster::select(l-&gt;fold(), rf, l-&gt;endpoint(0).value(), r0, l-&gt;endpoint(1).value());
+    r = rake-&gt;child(1 - dir);
+    rake = rake-&gt;child(dir);
+
+
+    right = cluster::rake(r-&gt;fold(), right, r-&gt;endpoint(0).value(), rv0, r-&gt;endpoint(1).value());
+    rv0 = r-&gt;endpoint(0).value();
+    rv1 = r-&gt;endpoint(1).value();
+
+    rake-&gt;push();
+  }
+  return rake;
+}
+
+std::pair&lt;vertex, vertex&gt; select(vertex v) {
+  node* n = expose(v);
+  cluster lf = cluster::identity();
+  cluster::V l0, l1;
+  bool luse = false;
+  cluster rf = cluster::identity();
+  cluster::V r0, r1;
+  bool ruse = false;
+
+  n-&gt;push();
+  while(n-&gt;type() == Type::Compress) {
+    node* a = n-&gt;child(0);
+    node* b = n-&gt;child(1);
+    node* r = n-&gt;rake();
+    a-&gt;push();
+    b-&gt;push();
+    if(r) { r-&gt;push(); }
+
+    cluster af = a-&gt;fold();
+    cluster::V a0 = a-&gt;endpoint(0).value();
+    cluster::V a1 = a-&gt;endpoint(1).value();
+    if(luse) {
+      af = cluster::compress(lf, af, l0, a1, l1);
+      a0 = l0;
+      a1 = a1;
+    }
+    cluster bf = b-&gt;fold();
+    cluster::V b0 = b-&gt;endpoint(0).value();
+    cluster::V b1 = b-&gt;endpoint(1).value();
+    if(ruse) {
+      bf = cluster::compress(bf, rf, b0, r1, b1);
+      b0 = b0;
+      b1 = r1;
+    }
+    cluster arf = af;
+    if(r) {
+      arf = cluster::rake(af, r-&gt;fold(), a0, r-&gt;endpoint(0).value(), a1);
+    }
+
+    std::size_t dir = cluster::select(arf, bf, a0, b1, a1);
+    
+    if(dir == 0) {
+      if(r) {
+        cluster rbf = cluster::reverse(bf);
+        cluster::V rb0 = b1;
+
+        cluster rrf = cluster::rake(r-&gt;fold(), rbf, r-&gt;endpoint(0).value(), rb0, r-&gt;endpoint(1).value());
+        cluster::V rr0 = r-&gt;endpoint(0).value();
+        cluster::V rr1 = r-&gt;endpoint(1).value();
+
+        dir = cluster::select(af, rrf, a0, rr0, a1);
+        if(dir == 0) {
+          rf = cluster::reverse(rrf);
+          r0 = rr1;
+          r1 = rr0;
+          ruse = true;
+          n = n-&gt;child(0);
+        }
+        else {
+          luse = false;
+          rf = cluster::rake(af, rbf, a0, rb0, a1);
+          r0 = a0;
+          r1 = a1;
+          ruse = true;
+          n = select_rake(r, rf, r0, r1);
+          rf = cluster::reverse(rf);
+          std::swap(r0, r1);
+        }
+      }
+      else {
+        rf = bf;
+        r0 = b0;
+        r1 = b1;
+        ruse = true;
+        n = n-&gt;child(0);
+      }
+    }
+    else {
+      lf = arf;
+      l0 = a0;
+      l1 = a1;
+      luse = true;
+      n = n-&gt;child(1);
+    }
+
+    n-&gt;push();
+  }
+  return { n-&gt;endpoint(0), n-&gt;endpoint(1) };
+}
+
+node ns[1010101];
+
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;tuple&gt;
+
+using namespace std;
+
+
+int main() {
+  i64 N;
+  cin &gt;&gt; N;
+
+  vector&lt;vertex&gt; vs;
+  for(int i = 0;i &lt; N;i++) {
+    vs.push_back(vertex(0));
+  }
+
+  for(int i = 0;i &lt; N - 1;i++) {
+    i64 a, b, c;
+    cin &gt;&gt; a &gt;&gt; b &gt;&gt; c;
+    link(vs[a], vs[b], cluster(c));
+  }
+
+  i64 Q;
+  cin &gt;&gt; Q;
+  for(i64 q = 0; q &lt; Q; q++) {
+    i64 type;
+    cin &gt;&gt; type;
+    if(type == 1) {
+      i64 u, v, w, x;
+      cin &gt;&gt; u &gt;&gt; v &gt;&gt; w &gt;&gt; x;
+      cut(vs[u], vs[v]);
+      link(vs[v], vs[w], cluster(x));
+    }
+    else {
+      i64 k;
+      cin &gt;&gt; k;
+      vector&lt;i64&gt; vec(k);
+      for(int i = 0;i &lt; k;i++) cin &gt;&gt; vec[i];
+      i64 ans = 0;
+      for(auto a: vec) {
+        auto node = expose(vs[a]);
+        vs[a].set_value(1);
+        node-&gt;fix();
+        ans = node-&gt;fold().ans;
+      }
+      cout &lt;&lt; ans &lt;&lt; endl;
+      for(auto a: vec) {
+        auto node = expose(vs[a]);
+        vs[a].set_value(0);
+        node-&gt;fix();
+      }
+    }
+  }
+}
+</code></pre>
 
                     </main>
 
@@ -157,6 +1083,10 @@
                         <!-- Mobile navigation buttons -->
                         
 
+                        
+                            <a rel="next" href="references.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
                         
 
                         <div style="clear: both"></div>
@@ -167,6 +1097,10 @@
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
                 
 
+                
+                    <a href="references.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
                 
             </nav>
 
